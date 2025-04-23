@@ -1,0 +1,42 @@
+<!-- public/register.html -->
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Cadastro</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h2>Cadastro</h2>
+    <form id="registerForm">
+      <input type="text" placeholder="Usuário" id="username" required />
+      <input type="password" placeholder="Senha" id="password" required />
+      <button type="submit">Cadastrar</button>
+    </form>
+    <p id="message"></p>
+    <a href="login.html">Já tem conta? Fazer login</a>
+  </div>
+
+  <script>
+    document.getElementById("registerForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+
+      const res = await fetch("/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await res.json();
+      document.getElementById("message").innerText = data.message;
+
+      if (res.ok) {
+        setTimeout(() => window.location.href = "login.html", 1500);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "controle-estoque",
+  "version": "1.0.0",
+  "description": "Sistema de estoque com Node.js",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.20.2",
+    "express": "^4.18.2"
+  }
+}

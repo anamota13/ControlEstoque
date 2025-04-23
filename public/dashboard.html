@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Painel de Controle</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h2>Painel de Controle de Estoque</h2>
+    
+    <form id="productForm">
+      <input type="text" id="name" placeholder="Nome do Produto" required>
+      <input type="text" id="brand" placeholder="Marca" required>
+      <input type="number" step="0.01" id="price" placeholder="Preço (R$)" required>
+      <input type="number" id="quantity" placeholder="Quantidade" required>
+      <input type="text" id="barcode" placeholder="Código de Barras" required>
+      <button type="submit">Cadastrar Produto</button>
+      <input type="hidden" id="editingId" />
+    </form>
+
+    <h3>Alertas de Estoque Baixo</h3>
+    <ul id="lowStockList"></ul>
+
+    <h3>Relatório de Estoque</h3>
+    <table id="inventoryReport">
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th>Quantidade</th>
+          <th>Preço</th>
+          <th>Valor Total</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="message"></div>
+  </div>
+
+  <script>
+    async function fetchLowStock() {
+      const res = await fetch("/products/low-stock");
+      const lowStockProducts = await res.json();
+      const list = document.getElementById("lowStockList");
+      list.innerHTML = "";
+      lowStockProducts.forEach(p => {
+        const li = document.createElement("li");
+        li.innerText = `${p.name} (Estoque: ${p.quantity})`;
+        list.appendChild(li);
+      });
+    }
+
+    async function fetchInventoryReport() {
+      const res = await fetch("/products/report");
+      const report = await res.json();
+      const table = document.getElementById("inventoryReport").getElementsByTagName('tbody')[0];
+      table.innerHTML = "";
+      report.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${p.name}</td>
+          <td>${p.quantity}</td>
+          <td>R$ ${p.price.toFixed(2)}</td>
+          <td>R$ ${(p.quantity * p.price).toFixed(2)}</td>
+        `;
+        table.appendChild(tr);
+      });
+    }
+
+    fetchLowStock();
+    fetchInventoryReport();
+  </script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Cadastrar Produto</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h2>Cadastrar Produto</h2>
+    <form id="productForm">
+      <input type="text" placeholder="Nome do Produto" id="name" required />
+      <input type="text" placeholder="Marca" id="brand" required />
+      <input type="number" step="0.01" placeholder="Preço (R$)" id="price" required />
+      <input type="number" placeholder="Quantidade" id="quantity" required />
+      <button type="submit">Cadastrar</button>
+    </form>
+    <p id="message"></p>
+    <a href="index.html">Voltar</a>
+  </div>
+
+  <script>
+    document.getElementById("productForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const name = document.getElementById("name").value;
+      const brand = document.getElementById("brand").value;
+      const price = document.getElementById("price").value;
+      const quantity = document.getElementById("quantity").value;
+
+      const res = await fetch("/products/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, brand, price, quantity })
+      });
+
+      const data = await res.json();
+      document.getElementById("message").innerText = data.message;
+
+      if (res.ok) {
+        document.getElementById("productForm").reset();
+      }
+    });
+  </script>
+</body>
+</html>
