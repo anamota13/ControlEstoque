@@ -9,6 +9,12 @@ const PORT = 3000;
 const productRoutes = require("./routes/productRoutes");
 app.use("/products", productRoutes);
 
+app.post("/login", (req, res) => {
+  // ...validação...
+
+  res.redirect("/dashboard.html"); // mostrar o dashboard
+});
+
 
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public'))); 

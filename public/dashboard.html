@@ -1,75 +1,347 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Painel de Controle</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Estoque</title>
+  <link rel="stylesheet" href="dashboard.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="container">
-    <h2>Painel de Controle de Estoque</h2>
-    
-    <form id="productForm">
-      <input type="text" id="name" placeholder="Nome do Produto" required>
-      <input type="text" id="brand" placeholder="Marca" required>
-      <input type="number" step="0.01" id="price" placeholder="Preço (R$)" required>
-      <input type="number" id="quantity" placeholder="Quantidade" required>
-      <input type="text" id="barcode" placeholder="Código de Barras" required>
-      <button type="submit">Cadastrar Produto</button>
-      <input type="hidden" id="editingId" />
-    </form>
+    <h1>Painel de Controle do Estoque</h1>
 
-    <h3>Alertas de Estoque Baixo</h3>
-    <ul id="lowStockList"></ul>
+    <div class="filters">
+      <select id="periodFilter">
+        <option value="ano">Último Ano</option>
+        <option value="mes">Último Mês</option>
+      </select>
+      <select id="stockFilter">
+        <option value="todos">Todos os Produtos</option>
+        <option value="baixo">Baixo Estoque</option>
+      </select>
+    </div>
 
-    <h3>Relatório de Estoque</h3>
-    <table id="inventoryReport">
-      <thead>
-        <tr>
-          <th>Produto</th>
-          <th>Quantidade</th>
-          <th>Preço</th>
-          <th>Valor Total</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <div class="cards">
+      <div class="card" id="lowStockCard"><h2>0</h2><p>Produtos com baixo estoque</p></div>
+      <div class="card" id="activeProductsCard"><h2>0</h2><p>Produtos ativos</p></div>
+      <div class="card" id="soldUnitsCard"><h2>0</h2><p>Unidades vendidas</p></div>
+      <div class="card" id="stockUnitsCard"><h2>0</h2><p>Unidades em estoque</p></div>
+    </div>
 
-    <div id="message"></div>
+    <div class="charts">
+      <canvas id="salesChart"></canvas>
+      <canvas id="stockChart"></canvas>
+    </div>
+
+    <div class="actions">
+      <button onclick="toggleProductForm()">Cadastrar Produto</button>
+      <button onclick="generateReport()">Gerar Relatório de Inventário</button>
+      <input type="text" id="barcodeSearch" placeholder="Buscar por código de barras" />
+      <button onclick="searchByBarcode()">Buscar</button>
+    </div>
+
+    <!-- Formulário de cadastro de produto -->
+    <div id="productForm" style="display:none; margin-bottom: 20px;">
+      <h3>Cadastrar Novo Produto</h3>
+      <form onsubmit="submitProductForm(event)">
+        <input type="text" id="productName" placeholder="Nome do produto" required />
+        <input type="text" id="barcode" placeholder="Código de barras" required />
+        <input type="number" id="price" placeholder="Preço" step="0.01" required />
+        <input type="number" id="stock" placeholder="Quantidade em estoque" required />
+        <button type="submit">Salvar Produto</button>
+      </form>
+    </div>
+
+    <div id="productsList"></div>
+
+    <div id="alertBox" style="display:none;"></div>
   </div>
 
+  <script src="dashboard.js"></script>
   <script>
-    async function fetchLowStock() {
-      const res = await fetch("/products/low-stock");
-      const lowStockProducts = await res.json();
-      const list = document.getElementById("lowStockList");
-      list.innerHTML = "";
-      lowStockProducts.forEach(p => {
-        const li = document.createElement("li");
-        li.innerText = `${p.name} (Estoque: ${p.quantity})`;
-        list.appendChild(li);
-      });
+    let products = [];
+
+    function toggleProductForm() {
+      const form = document.getElementById('productForm');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
     }
 
-    async function fetchInventoryReport() {
-      const res = await fetch("/products/report");
-      const report = await res.json();
-      const table = document.getElementById("inventoryReport").getElementsByTagName('tbody')[0];
-      table.innerHTML = "";
-      report.forEach(p => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${p.name}</td>
-          <td>${p.quantity}</td>
-          <td>R$ ${p.price.toFixed(2)}</td>
-          <td>R$ ${(p.quantity * p.price).toFixed(2)}</td>
+    function submitProductForm(event) {
+      event.preventDefault();
+
+      const productName = document.getElementById('productName').value;
+      const barcode = document.getElementById('barcode').value;
+      const price = parseFloat(document.getElementById('price').value);
+      const stock = parseInt(document.getElementById('stock').value);
+
+      const newProduct = { name: productName, barcode, price, stock };
+      products.push(newProduct);
+
+      updateCards();
+      alert('Produto cadastrado com sucesso!');
+
+      // Limpar formulário
+      document.getElementById('productName').value = '';
+      document.getElementById('barcode').value = '';
+      document.getElementById('price').value = '';
+      document.getElementById('stock').value = '';
+
+      toggleProductForm();
+    }
+
+    function deleteProduct(barcode) {
+      products = products.filter(product => product.barcode !== barcode);
+      updateCards(true); // Skip low stock notification
+      alert('Produto excluído com sucesso!');
+    }
+
+    function editProduct(barcode) {
+      const product = products.find(product => product.barcode === barcode);
+      if (!product) {
+        alert('Produto não encontrado!');
+        return;
+      }
+
+      // Preencher o formulário com os dados do produto
+      document.getElementById('productName').value = product.name;
+      document.getElementById('barcode').value = product.barcode;
+      document.getElementById('price').value = product.price;
+      document.getElementById('stock').value = product.stock;
+
+      // Exibir o formulário para edição
+      toggleProductForm();
+
+      // Remover o produto antigo ao salvar o novo
+      deleteProduct(barcode);
+    }
+
+    function renderProductList() {
+      const productList = document.getElementById('productsList');
+      productList.innerHTML = '';
+
+      products.forEach(product => {
+        const productItem = document.createElement('div');
+        productItem.className = 'product-item';
+        productItem.style.border = '1px solid #ccc';
+        productItem.style.borderRadius = '8px';
+        productItem.style.padding = '10px';
+        productItem.style.marginBottom = '10px';
+        productItem.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.1)';
+
+        productItem.innerHTML = `
+          <h4 style="margin: 0; color: #333;">${product.name}</h4>
+          <p style="margin: 5px 0; color: #555;"><strong>Código de Barras:</strong> ${product.barcode}</p>
+          <p style="margin: 5px 0; color: #555;"><strong>Preço:</strong> R$ ${product.price.toFixed(2)}</p>
+          <p style="margin: 5px 0; color: #555;"><strong>Estoque:</strong> ${product.stock}</p>
+          <div style="margin-top: 10px;">
+            <button style="background-color: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;" onclick="editProduct('${product.barcode}')">Editar</button>
+            <button style="background-color: #f44336; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-left: 5px;" onclick="deleteProduct('${product.barcode}')">Excluir</button>
+          </div>
         `;
-        table.appendChild(tr);
+        productList.appendChild(productItem);
       });
     }
 
-    fetchLowStock();
-    fetchInventoryReport();
+    function updateCards(skipLowStockNotification = false) {
+      const lowStockThreshold = 5;
+      const lowStockCount = products.filter(p => p.stock < lowStockThreshold).length;
+      const totalStock = products.reduce((sum, p) => sum + p.stock, 0);
+
+      document.getElementById('lowStockCard').querySelector('h2').textContent = lowStockCount;
+      document.getElementById('activeProductsCard').querySelector('h2').textContent = products.length;
+      document.getElementById('stockUnitsCard').querySelector('h2').textContent = totalStock;
+
+      renderProductList();
+
+      if (!skipLowStockNotification) {
+        checkLowStockNotifications();
+      }
+    }
+
+    function searchByBarcode() {
+      const barcodeSearch = document.getElementById('barcodeSearch').value;
+      const product = products.find(p => p.barcode === barcodeSearch);
+
+      if (product) {
+        const productList = document.getElementById('productsList');
+        productList.innerHTML = '';
+
+        const productItem = document.createElement('div');
+        productItem.className = 'product-item';
+        productItem.style.border = '1px solid #ccc';
+        productItem.style.borderRadius = '8px';
+        productItem.style.padding = '10px';
+        productItem.style.marginBottom = '10px';
+        productItem.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.1)';
+
+        productItem.innerHTML = `
+          <h4 style="margin: 0; color: #333;">${product.name}</h4>
+          <p style="margin: 5px 0; color: #555;"><strong>Código de Barras:</strong> ${product.barcode}</p>
+          <p style="margin: 5px 0; color: #555;"><strong>Preço:</strong> R$ ${product.price.toFixed(2)}</p>
+          <p style="margin: 5px 0; color: #555;"><strong>Estoque:</strong> ${product.stock}</p>
+        `;
+        productList.appendChild(productItem);
+      } else {
+        alert('Produto não encontrado!');
+      }
+    }
+
+    function generateReport() {
+      if (products.length === 0) {
+        alert('Nenhum produto cadastrado para gerar o relatório.');
+        return;
+      }
+
+      let reportContent = 'Relatório de Estoque\n\n';
+      reportContent += 'Nome do Produto | Código de Barras | Preço | Estoque\n';
+      reportContent += '---------------------------------------------------\n';
+
+      products.forEach(product => {
+        reportContent += `${product.name} | ${product.barcode} | R$ ${product.price.toFixed(2)} | ${product.stock}\n`;
+      });
+
+      const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'relatorio_estoque.txt';
+      link.click();
+
+      alert('Relatório gerado com sucesso!');
+    }
+
+    function simulatePurchase() {
+      const barcode = prompt('Digite o código de barras do produto que deseja comprar:');
+      const quantity = parseInt(prompt('Digite a quantidade que deseja comprar:'));
+
+      if (!barcode || isNaN(quantity) || quantity <= 0) {
+        alert('Dados inválidos. Tente novamente.');
+        return;
+      }
+
+      const product = products.find(p => p.barcode === barcode);
+
+      if (!product) {
+        alert('Produto não encontrado!');
+        return;
+      }
+
+      if (product.stock < quantity) {
+        alert('Estoque insuficiente para a compra.');
+        return;
+      }
+
+      product.stock -= quantity;
+      alert(`Compra realizada com sucesso! Você comprou ${quantity} unidade(s) de ${product.name}.`);
+
+      updateCards();
+    }
+
+    function applyFilters() {
+      const periodFilter = document.getElementById('periodFilter').value;
+      const stockFilter = document.getElementById('stockFilter').value;
+
+      let filteredProducts = [...products];
+
+      // Filtro de estoque
+      if (stockFilter === 'baixo') {
+        const lowStockThreshold = 5;
+        filteredProducts = filteredProducts.filter(product => product.stock < lowStockThreshold);
+      }
+
+      // Filtro de período (simulação, pois não há dados de vendas reais)
+      if (periodFilter === 'mes') {
+        alert('Filtro de período aplicado: Último Mês (simulação).');
+      } else if (periodFilter === 'ano') {
+        alert('Filtro de período aplicado: Último Ano (simulação).');
+      }
+
+      renderFilteredProducts(filteredProducts);
+    }
+
+    function renderFilteredProducts(filteredProducts) {
+      const productList = document.getElementById('productsList');
+      productList.innerHTML = '';
+
+      filteredProducts.forEach(product => {
+        const productItem = document.createElement('div');
+        productItem.className = 'product-item';
+        productItem.style.border = '1px solid #ccc';
+        productItem.style.borderRadius = '8px';
+        productItem.style.padding = '10px';
+        productItem.style.marginBottom = '10px';
+        productItem.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.1)';
+
+        productItem.innerHTML = `
+          <h4 style="margin: 0; color: #333;">${product.name}</h4>
+          <p style="margin: 5px 0; color: #555;"><strong>Código de Barras:</strong> ${product.barcode}</p>
+          <p style="margin: 5px 0; color: #555;"><strong>Preço:</strong> R$ ${product.price.toFixed(2)}</p>
+          <p style="margin: 5px 0; color: #555;"><strong>Estoque:</strong> ${product.stock}</p>
+        `;
+        productList.appendChild(productItem);
+      });
+    }
+
+    function checkLowStockNotifications() {
+      const lowStockThreshold = 5;
+      const lowStockProducts = products.filter(product => product.stock < lowStockThreshold);
+
+      if (lowStockProducts.length > 0) {
+        let notificationMessage = 'Atenção! Os seguintes produtos estão com estoque baixo:\n';
+        lowStockProducts.forEach(product => {
+          notificationMessage += `- ${product.name} (Estoque: ${product.stock})\n`;
+        });
+        alert(notificationMessage);
+      } else {
+        console.log('Todos os produtos estão com estoque adequado.');
+      }
+    }
+
+    // Removendo o gráfico
+    function renderCharts() {
+      // Gráficos desativados
+    }
+
+    // Melhorando o layout do formulário de cadastro de produto
+    const productForm = document.getElementById('productForm');
+    productForm.style.border = '1px solid #ccc';
+    productForm.style.borderRadius = '8px';
+    productForm.style.padding = '20px';
+    productForm.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.1)';
+    productForm.style.backgroundColor = '#f9f9f9';
+
+    const formInputs = productForm.querySelectorAll('input');
+    formInputs.forEach(input => {
+      input.style.marginBottom = '10px';
+      input.style.padding = '10px';
+      input.style.border = '1px solid #ccc';
+      input.style.borderRadius = '4px';
+      input.style.width = '100%';
+      input.style.boxSizing = 'border-box';
+    });
+
+    const formButton = productForm.querySelector('button');
+    formButton.style.backgroundColor = '#4CAF50';
+    formButton.style.color = 'white';
+    formButton.style.border = 'none';
+    formButton.style.padding = '10px 20px';
+    formButton.style.borderRadius = '4px';
+    formButton.style.cursor = 'pointer';
+    formButton.style.marginTop = '10px';
+
+    formButton.addEventListener('mouseover', () => {
+      formButton.style.backgroundColor = '#45a049';
+    });
+
+    formButton.addEventListener('mouseout', () => {
+      formButton.style.backgroundColor = '#4CAF50';
+    });
+
+    document.addEventListener('DOMContentLoaded', checkLowStockNotifications);
+    document.addEventListener('DOMContentLoaded', renderCharts);
+
+    document.getElementById('periodFilter').addEventListener('change', applyFilters);
+    document.getElementById('stockFilter').addEventListener('change', applyFilters);
   </script>
 </body>
 </html>
